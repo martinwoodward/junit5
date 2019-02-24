@@ -260,6 +260,16 @@ public final class AnnotationUtils {
 					Annotation[] containedAnnotations = (Annotation[]) ReflectionUtils.invokeMethod(method, candidate);
 					found.addAll((Collection<? extends A>) asList(containedAnnotations));
 				}
+				// Nested container annotation?
+				else if (isRepeatableAnnotationContainer(candidateAnnotationType)) {
+					Method method = ReflectionUtils.tryToGetMethod(candidateAnnotationType, "value").toOptional().get();
+					Annotation[] containedAnnotations = (Annotation[]) ReflectionUtils.invokeMethod(method, candidate);
+
+					for (Annotation containedAnnotation : containedAnnotations) {
+						findRepeatableAnnotations(containedAnnotation.getClass(), annotationType, containerType,
+							inherited, found, visited);
+					}
+				}
 				// Otherwise search recursively through the meta-annotation hierarchy...
 				else {
 					findRepeatableAnnotations(candidateAnnotationType, annotationType, containerType, inherited, found,
@@ -267,6 +277,23 @@ public final class AnnotationUtils {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Determine if the supplied annotation type is a container for a repeatable
+	 * annotation.
+	 *
+	 * @since 1.5
+	 */
+	private static boolean isRepeatableAnnotationContainer(Class<? extends Annotation> candidateContainerType) {
+		Repeatable repeatable = Arrays.stream(candidateContainerType.getMethods())//
+				.filter(m -> m.getName().equals("value")) //
+				.filter(m -> m.getReturnType().isArray()) //
+				.findFirst() //
+				.map(m -> m.getReturnType().getComponentType().getAnnotation(Repeatable.class)) //
+				.orElse(null);
+
+		return (repeatable != null && candidateContainerType.equals(repeatable.value()));
 	}
 
 	/**
